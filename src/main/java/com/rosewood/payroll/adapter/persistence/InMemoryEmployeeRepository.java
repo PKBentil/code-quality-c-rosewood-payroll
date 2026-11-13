@@ -1,4 +1,7 @@
-package com.rosewood.payroll;
+package com.rosewood.payroll.adapter.persistence;
+
+import com.rosewood.payroll.domain.model.Employee;
+import com.rosewood.payroll.port.EmployeeRepository;
 
 import java.util.HashMap;
 import java.util.Map;

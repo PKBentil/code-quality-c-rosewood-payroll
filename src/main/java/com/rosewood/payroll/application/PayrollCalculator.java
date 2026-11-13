@@ -1,4 +1,8 @@
-package com.rosewood.payroll;
+package com.rosewood.payroll.application;
+
+import com.rosewood.payroll.adapter.persistence.InMemoryEmployeeRepository;
+import com.rosewood.payroll.domain.model.Employee;
+import com.rosewood.payroll.port.EmployeeRepository;
 
 public class PayrollCalculator {
 

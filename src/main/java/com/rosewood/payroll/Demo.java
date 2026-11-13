@@ -1,5 +1,7 @@
 package com.rosewood.payroll;
 
+import com.rosewood.payroll.application.PayrollCalculator;
+
 public class Demo {
     public static void main(String[] args) {
         PayrollCalculator calculator = new PayrollCalculator();

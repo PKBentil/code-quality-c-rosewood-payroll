@@ -1,5 +1,6 @@
 package com.rosewood.payroll;
 
+import com.rosewood.payroll.application.PayrollCalculator;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
