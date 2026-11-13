@@ -141,8 +141,8 @@ classDiagram
 ### 3.2 Sequence diagram: unknown employee (the silent failure)
 
 ```mermaid
+
 sequenceDiagram
-    autonumber
     actor Caller
     participant PC as PayrollCalculator
     participant Repo as InMemoryEmployeeRepository
@@ -150,12 +150,19 @@ sequenceDiagram
     Caller->>PC: calculateNetPay("unknown", 40, 20)
     PC->>Repo: findById("unknown")
     Repo-->>PC: null
-    Note over PC: gross = 800, taxRate = 0.05, net = 760<br/>(computed even though there is no employee)
+
+    Note over PC: No explicit employee-not-found check
+
+    PC->>PC: Calculate gross pay = 800
+    PC->>PC: Calculate tax = 40
+    PC->>PC: Calculate net pay = 760
+
     PC->>PC: employee.getName()
-    Note over PC: NullPointerException thrown by accident
-    Note over PC: catch (Exception e) { return 0; }
-    PC-->>Caller: 0.0
-Note over Caller: Cannot tell "employee missing" from "paid nothing"
+    Note over PC: NullPointerException occurs
+
+    PC->>PC: catch (Exception e)
+    PC-->>Caller: return 0.0
+
 ```
 
 **What the diagram shows:** the "not found" case is never checked. It is only detected because the `println` happens to dereference `null`. The correct net pay is calculated and then thrown away. The caller receives `0.0` with no signal that anything went wrong.
