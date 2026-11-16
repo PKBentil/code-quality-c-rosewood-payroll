@@ -3,8 +3,10 @@ package com.rosewood.payroll.adapter.persistence;
 import com.rosewood.payroll.domain.model.Employee;
 import com.rosewood.payroll.port.EmployeeRepository;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 public class InMemoryEmployeeRepository implements EmployeeRepository {
 
@@ -15,8 +17,14 @@ public class InMemoryEmployeeRepository implements EmployeeRepository {
         employees.put("e2", new Employee("e2", "Kwame Owusu"));
     }
 
+    public InMemoryEmployeeRepository(Collection<Employee> employees){
+        for (Employee employee : employees) {
+            this.employees.put(employee.getId(), employee);
+        }
+    }
+
     @Override
-    public Employee findById(String id) {
-        return employees.get(id); // returns null when the id is not found
+    public Optional<Employee> findById(String id) {
+        return Optional.ofNullable(employees.get(id));
     }
 }
