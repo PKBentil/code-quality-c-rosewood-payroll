@@ -85,10 +85,13 @@
 
             <!-- Mutation testing: mvn test-compile org.pitest:pitest-maven:mutationCoverage
                  then open target/pit-reports/index.html -->
+            <!-- Mutation testing: mvn test-compile org.pitest:pitest-maven:mutationCoverage
+      then open target/pit-reports/index.html -->
             <plugin>
                 <groupId>org.pitest</groupId>
                 <artifactId>pitest-maven</artifactId>
                 <version>${pitest.version}</version>
+
                 <dependencies>
                     <dependency>
                         <groupId>org.pitest</groupId>
@@ -96,13 +99,24 @@
                         <version>${pitest.junit5.version}</version>
                     </dependency>
                 </dependencies>
+
                 <configuration>
                     <targetClasses>
                         <param>com.rosewood.payroll.*</param>
                     </targetClasses>
+
                     <targetTests>
                         <param>com.rosewood.payroll.*</param>
                     </targetTests>
+
+                    <excludedClasses>
+                        <param>com.rosewood.payroll.Demo</param>
+                    </excludedClasses>
+
+                    <mutators>
+                        <mutator>DEFAULTS</mutator>
+                        <mutator>EXPERIMENTAL_BIG_DECIMAL</mutator>
+                    </mutators>
                 </configuration>
             </plugin>
         </plugins>

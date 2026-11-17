@@ -1,4 +1,4 @@
-package com.rosewood.payroll;
+package com.rosewood.payroll.domain.model;
 
 public class Employee {
     private final String id;
