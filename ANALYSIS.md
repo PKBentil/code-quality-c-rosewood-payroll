@@ -1,6 +1,7 @@
 # ANALYSIS: Rosewood Payroll (pre-refactor)
 
-
+> Written and committed **before any code was changed**, so the history shows diagnosis before treatment.
+> Standard references use *AmaliTech Coding Standards: Java Edition* (`§ ___` = fill in the section number).
 
 ---
 
@@ -138,11 +139,12 @@ classDiagram
 - `PayrollCalculator` is the only class with logic, and it depends on everything else. There is no tax, overtime, validation or money abstraction at all.
 - `Employee` is used only to print a name, so the lookup contributes nothing to the number returned.
 
-### 3.2 Sequence diagram: unknown employee (the silent failure)
+
+### 3.2 Sequence diagram: Unknown employee — the silent failure
 
 ```mermaid
-
 sequenceDiagram
+    autonumber
     actor Caller
     participant PC as PayrollCalculator
     participant Repo as InMemoryEmployeeRepository
@@ -151,19 +153,20 @@ sequenceDiagram
     PC->>Repo: findById("unknown")
     Repo-->>PC: null
 
-    Note over PC: No explicit employee-not-found check
-
-    PC->>PC: Calculate gross pay = 800
-    PC->>PC: Calculate tax = 40
-    PC->>PC: Calculate net pay = 760
+    Note over PC: Gross pay calculated as GHS 800
+    Note over PC: Tax calculated as GHS 40
+    Note over PC: Net pay calculated as GHS 760
 
     PC->>PC: employee.getName()
-    Note over PC: NullPointerException occurs
+    Note over PC: NullPointerException thrown
 
-    PC->>PC: catch (Exception e)
-    PC-->>Caller: return 0.0
+    Note over PC: catch Exception and return 0.0
+    PC-->>Caller: 0.0
 
+    Note over Caller: Missing employee is indistinguishable from zero pay
 ```
+
+**What the diagram shows:** The calculator does not check whether the employee exists. It calculates the payslip figures before accidentally triggering a `NullPointerException` when accessing the employee's name. The broad exception handler swallows the error and returns `0.0`, leaving the caller unaware that payroll calculation failed.
 
 **What the diagram shows:** the "not found" case is never checked. It is only detected because the `println` happens to dereference `null`. The correct net pay is calculated and then thrown away. The caller receives `0.0` with no signal that anything went wrong.
 
@@ -281,13 +284,201 @@ Earning GHS 0.01 more **reduces** take-home pay by about GHS 100 at the first th
 
 ---
 
-## 8. Most serious problem 
+## 8. Most serious problem (DRAFT: rewrite in your own words)
 
 The most serious problem is the **swallowed failure combined with hollow tests**. Individually they are bad, but together they make every other defect invisible: the code converts any error into a plausible-looking `0`, and the test suite cannot detect either the wrong number or the wrong behaviour. Money as `double` and the cliff-edge tax are real risks, but they would be caught by a suite that asserted exact values. The swallowed exception and the green-but-empty tests are what stop anyone from finding them. The measured evidence fits this: the build is green with 62% line coverage, yet PIT kills only 3 of 21 mutants (14%), and the one test that kills anything does so by accident through `net > 0`.
 
-
+*(Be ready to argue the opposite: why might `double` for money, or the missing validation, be worse?)*
 
 ---
 
-## 9. Decisions *(added after the refactor)*
+## 9. Decisions (written after the refactor)
 
+### 9.1 Result in one table
+
+| | Inherited code and tests | After the refactor |
+|---|---|---|
+| Production classes with logic | 1 (`PayrollCalculator`, one method doing 8 jobs) | `PayrollService` (orchestration only), `PayInputValidator`, `GrossPayCalculator`, `TaxCalculator`, `TaxBand` / `FlatRateTaxBand` / `StandardTaxBands`, `Money`, `Payslip` |
+| Tests | 3 (2 hollow, 1 weak) | ‹N› tests, all asserting exact figures or exact exceptions |
+| PIT mutants killed | 3 of 21 (14%) | **52 of 52 (100%)** |
+| PIT mutants not covered | 10 | **0** |
+| PIT test strength | 27% | **100%** |
+| PIT line coverage (mutated classes) | 62% | **96%** (105 of 109) |
+| Unknown employee | returns `0.0` | throws `EmployeeNotFoundException` |
+| Negative hours | returns negative pay | throws `InvalidHoursException` |
+| Money | `double`, no rounding rule | `BigDecimal`, 2 decimals, half-up |
+| New tax band | edit the `if/else` chain | add a `TaxBand` (one class or one config entry) |
+
+The "after" PIT run used `DEFAULTS` plus `EXPERIMENTAL_BIG_DECIMAL`, because the default mutators do not touch `BigDecimal` method calls and the first run after the refactor therefore skipped the money arithmetic (it listed no Math mutants at all). `Demo` is excluded from mutation testing (D15). The two runs use different mutator sets, so they show the shape of the improvement, not a like-for-like score.
+
+### 9.2 Design after the refactor (UML)
+
+```mermaid
+classDiagram
+    direction LR
+
+    class Demo {
+        +main(String[] args)$ void
+    }
+    class PayrollService {
+        +calculatePayslip(String employeeId, double hours, BigDecimal rate) Payslip
+    }
+    class EmployeeRepository {
+        <<interface>>
+        +findById(String id) Optional~Employee~
+    }
+    class InMemoryEmployeeRepository
+    class PayInputValidator {
+        +validateHours(double) void
+        +validateRate(BigDecimal) void
+    }
+    class GrossPayCalculator {
+        +calculate(double hours, BigDecimal rate) BigDecimal
+    }
+    class TaxCalculator {
+        +taxFor(BigDecimal gross) BigDecimal
+    }
+    class TaxBand {
+        <<interface>>
+        +appliesTo(BigDecimal gross) boolean
+        +taxOn(BigDecimal gross) BigDecimal
+    }
+    class FlatRateTaxBand
+    class StandardTaxBands {
+        +all()$ List~TaxBand~
+    }
+    class PremiumTaxBand {
+        <<future band, own rules>>
+    }
+    class Payslip {
+        <<record>>
+        employee, grossPay, tax, netPay
+    }
+    class Employee
+    class Money {
+        +round(BigDecimal)$ BigDecimal
+    }
+    class PayrollException {
+        <<unchecked>>
+    }
+
+    Demo ..> PayrollService : wires the parts together
+    PayrollService --> EmployeeRepository : injected
+    PayrollService --> PayInputValidator : injected
+    PayrollService --> GrossPayCalculator : injected
+    PayrollService --> TaxCalculator : injected
+    PayrollService ..> Payslip : creates
+    InMemoryEmployeeRepository ..|> EmployeeRepository
+    TaxCalculator o-- TaxBand : injected list
+    FlatRateTaxBand ..|> TaxBand
+    PremiumTaxBand ..|> TaxBand
+    StandardTaxBands ..> FlatRateTaxBand : builds
+    Payslip --> Employee
+    GrossPayCalculator ..> Money
+    FlatRateTaxBand ..> Money
+    EmployeeNotFoundException --|> PayrollException
+    InvalidHoursException --|> PayrollException
+    InvalidRateException --|> PayrollException
+    NoApplicableTaxBandException --|> PayrollException
+    PayrollService ..> EmployeeNotFoundException : throws
+```
+
+**Package layout (hexagonal):** `domain` (model, exception, pay, tax) depends on nothing; `port` holds the repository interface; `adapter.persistence` implements it; `application` coordinates; `validation` checks inputs; `Demo` is the composition root. Dependencies point inward only.
+
+**The same scenario that used to return 0.0 (unknown employee):**
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Caller as Demo (program boundary)
+    participant PS as PayrollService
+    participant V as PayInputValidator
+    participant Repo as EmployeeRepository
+
+    Caller->>PS: calculatePayslip("unknown", 40, 20)
+    PS->>V: validateHours(40), validateRate(20)
+    V-->>PS: ok
+    PS->>Repo: findById("unknown")
+    Repo-->>PS: Optional.empty
+    PS-->>Caller: throws EmployeeNotFoundException("unknown")
+    Note over Caller: catches PayrollException and reports it. Nothing is swallowed, no 0.0.
+```
+
+### 9.3 Key decisions and why
+
+| # | Decision | Why | How I checked it |
+|---|---|---|---|
+| D1 | The repository returns `Optional<Employee>`; `PayrollService` turns "absent" into `EmployeeNotFoundException`. | Absence is a normal answer for a lookup, but for payroll it is an error. The old code only noticed by accident (a `NullPointerException` inside a `catch`). | `PayrollServiceTest.anUnknownEmployeeIsAnErrorNotAZeroPayslip`, `PayrollServiceIntegrationTest.anUnknownEmployeeNowFailsInsteadOfReturningZero`, `InMemoryEmployeeRepositoryTest` |
+| D2 | Hours: reject negative, `NaN`, infinite. Rate: reject null and negative. **Zero is valid for both.** Hours stay `double`; the rate became `BigDecimal`. | A valid zero must be distinguishable from a failure. A rate is money, so it must not be a binary float. | `PayInputValidatorTest` (boundary cases 0 and -0.01), `PayrollServiceTest` (`verifyNoInteractions` plus the exception type) |
+| D3 | Money is `BigDecimal`, scale 2, `HALF_UP`, defined once in `Money`. | Removes floating-point drift and gives the rounding rule one home. | `MoneyTest` (tie cases `0.005` to `0.01`, `49.9995` to `50.00`); PIT `BigDecimalMutator`: 8 of 8 killed |
+| D4 | **Preserve** today's tax behaviour: the rate applies to the whole gross, so 999.99 nets 949.99 but 1000.00 nets 850.00. | Changing a business rule silently inside a refactor is riskier than leaving it. It is recorded as an open question (section 5). | Boundary rows G6 to G9 in `TaxCalculatorTest` and `PayrollServiceTest` pin the current behaviour. |
+| D5 | The result is a `Payslip` record (employee, gross, tax, net), not a single number. | Tests can assert every component, and callers see how the net figure was reached. | `PayslipTest`, golden-table assertions on all four fields |
+| D6 | One unchecked `PayrollException` base with specific subtypes. | One catch point for callers that can recover, clear types where they add meaning, and no forced `throws` noise. | `PayrollExceptionsTest`, `NoApplicableTaxBandExceptionTest` |
+| D7 | The `println` was removed. | I/O and personal data inside business logic. The Demo prints at the boundary instead. | Demo output reviewed; no test output contains names or pay |
+| D8 | Gross is rounded to 2 decimals at the end of the gross calculation. | A payslip amount is money, so it has pesewas. | `GrossPayCalculatorTest` (`41h at 10.01` gives 415.42 from 415.415) |
+| D9 | One `TaxBand` interface and one configurable `FlatRateTaxBand`, not three copy-pasted Low/Medium/High classes. | A new band is one new entry, or one new class if its rule is different, so nothing existing is edited. | `NewTaxBandExtensionTest` |
+| D10 | The first matching band wins, and no match throws `NoApplicableTaxBandException` instead of taxing at zero. | A gap in the configuration must fail loudly. | `TaxCalculatorTest.firstMatchingBandWins`, `failsLoudlyWhenNoBandCoversTheAmount` |
+| D11 | The payslip carries the employee, so the lookup has a purpose. | In the old code the employee was only used for a `println`. | `PayrollServiceTest` (`assertSame(efua, payslip.employee())`) |
+| D12 | Validate inputs before looking the employee up. | Bad input should never cause a lookup. | `invalidHoursAreRejectedBeforeAnyLookup` (`verifyNoInteractions` beside the exception assertion) |
+| D13 | `PayrollService` never catches. `Demo` catches `PayrollException` at the program boundary. | Catch only where someone can be told. Nothing is swallowed or hidden. | `aRepositoryFailureReachesTheCallerUntouched` (`assertSame`), `aGapInTheTaxBandsReachesTheCaller...` |
+| D14 | Only `EmployeeRepository` is an interface. | It is the real I/O boundary. The calculators are plain classes used for real in tests, which keeps mocks to the one seam that needs one. | Mockito is used only for the repository; every other collaborator in `PayrollServiceTest` is real. |
+| D15 | PIT runs with `EXPERIMENTAL_BIG_DECIMAL`, and `Demo` is excluded. | The default mutators skip `BigDecimal` calls; `Demo` is pure wiring and printing with no logic to protect. | PIT before and after tables in 9.1 |
+| D16 | Hexagonal package layout (`domain`, `port`, `adapter`, `application`, `validation`). | Dependencies point inward and the repository can be swapped without touching the rules. | Package structure and imports |
+
+**Assumptions not confirmed with the business:** a rate of 0 is allowed; there is no upper limit on hours; the tax cliff at 1000 and 5000 is kept; rounding is half-up to 2 decimals.
+
+### 9.4 How the design absorbs the coming tax band
+
+The business is about to add a new tax band with its own rules. In the inherited code that meant editing the `if/else` ladder inside the one method that also did everything else, and risking the three bands that already worked.
+
+Now the bands are data handed to `TaxCalculator`, which depends only on the `TaxBand` interface.
+
+- **A band that is just another flat rate:** add one `FlatRateTaxBand` entry to `StandardTaxBands`, and give the previous top band an upper bound.
+- **A band with different rules:** write one new class that implements `TaxBand`. `NewTaxBandExtensionTest` does exactly this with a `PremiumTaxBand` (5,000 plus 35% of the amount above 20,000). **No production class is edited.** The old results are unchanged (1402.50 and 3750.00 still hold) and the new band is checked at 20,000.00, 28,000.00 and 19,999.60.
+- **The usual mistake is guarded:** `TaxBandCoverageTest` sweeps every amount from 0.00 to 20,000.00 in 0.01 steps and fails the build if any amount is covered by no band (a gap) or by two bands (an overlap). Two extra tests feed it a deliberately wrong list, so the guard itself is proven.
+
+### 9.5 What I kept, fixed or rewrote from the AI, and how I checked it
+
+| Item | Verdict | What and why | How I checked |
+|---|---|---|---|
+| Tax rates, thresholds and overtime rule (5/15/25%, 1000/5000, 40h at 1.5x) | **Kept** | They are the business rules. I changed where they live, not what they say. | Hand-computed golden table, 11 rows, checked against the old code with `jshell` before refactoring |
+| `Employee` model | **Kept** | Small and fine. | Used by `Payslip` and the tests |
+| `EmployeeRepository` | **Fixed** | Same purpose, but the contract now says absence is possible (`Optional`). | `InMemoryEmployeeRepositoryTest` |
+| `InMemoryEmployeeRepository` | **Fixed** | Returns `Optional`, and gained a constructor that takes a list so tests control the data. | `InMemoryEmployeeRepositoryTest` |
+| `PayrollCalculator` | **Rewrote** | One method doing eight jobs, with a swallowed failure, `double` money and a hard-wired dependency. Replaced by `PayrollService`, `PayInputValidator`, `GrossPayCalculator`, `TaxCalculator` and `TaxBand`. | Findings 1 to 13 in section 4, traced in 9.6 |
+| `Demo` | **Rewrote** | Same purpose, but it is now the composition root and the only place a failure is caught and reported. | Run output shows the four expected lines |
+| `calculatesOvertimePay` | **Rewrote** | It mocked the class under test and could never fail. The figure it used (1402.5) was right, so the expectation was kept and tested against real code. | `PayrollServiceTest` golden row G5; `PayrollServiceIntegrationTest.paysKwameOvertimeInTheMediumBand` |
+| `returnsPayForAnEmployee` | **Deleted** | `assertNotNull` on a primitive `double` cannot fail. | n/a |
+| `calculatesNetPay` | **Rewrote** | `net > 0` accepts any positive number. Replaced by exact-value assertions. | `PayrollServiceIntegrationTest.paysEfuaInTheLowBand` (760.00) |
+
+**Verification that the new tests catch bugs:**
+- **PIT:** 52 of 52 mutants killed, 0 not covered (with the `BigDecimal` mutator, `Demo` excluded).
+- **Planted by hand** (PIT does not mutate constants): `1.5` to `1.25` and `40` to `41` in `GrossPayCalculator` (`GrossPayCalculatorTest`), `0.15` to `0.16` in `StandardTaxBands` (`TaxCalculatorTest`), and `HALF_UP` to `HALF_EVEN` in `Money` (`MoneyTest`). The named test failed each time.
+
+### 9.6 Every finding, and where it was resolved
+
+| Finding (section 4 rank) | Resolved by |
+|---|---|
+| 1 Swallowed failure | No `catch` in `PayrollService`; `aRepositoryFailureReachesTheCallerUntouched`; `Demo` catches only at the boundary |
+| 2 No deliberate "not found" | `Optional` plus `EmployeeNotFoundException` (D1) |
+| 3 Money as `double` | `BigDecimal` and `Money` (D3) |
+| 4 No input validation | `PayInputValidator` (D2) |
+| 5 Tax `if/else` (Open/Closed) | `TaxBand` strategy (D9), proven by `NewTaxBandExtensionTest` |
+| 6 Hard-wired dependency | Constructor injection throughout; composition root in `Demo` |
+| 7 God method | Five collaborators with one job each |
+| 8 I/O in business logic | `println` removed (D7) |
+| 9 Magic numbers | Named constants in `GrossPayCalculator`, rates and bounds in `StandardTaxBands` |
+| 10 Pointless lookup | The payslip carries the employee (D11) |
+| 11 Primitive obsession | **Partly:** the rate is `BigDecimal` and the result is a `Payslip`, but `hoursWorked` is still a `double` and the employee id a `String`. |
+| 12 Repository returns `null` | `Optional` (D1) |
+| 13 `Demo` coupled to the constructor | `Demo` is the composition root |
+
+### 9.7 One improvement beyond the brief: the tax band coverage sweep
+
+`TaxBandCoverageTest` guards against a whole class of bug: a gap or overlap in the tax bands. It matters because the business is about to add a band, and the cheapest wrong boundary produces payslips that are wrong only for certain amounts, which a handful of example tests would not notice. It runs in about a third of a second, and it keeps guarding every future edit to `StandardTaxBands`.
+
+### 9.8 Open questions for the business
+
+1. Is the whole-gross tax rate intended? Earning 0.01 more at a threshold lowers take-home pay by about 100 at 1000 and about 500 at 5000.
+2. Is a rate of 0 valid, and should hours have an upper limit?
+3. Is half-up to 2 decimals the required rounding rule?
