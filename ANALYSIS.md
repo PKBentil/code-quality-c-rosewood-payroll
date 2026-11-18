@@ -1,7 +1,7 @@
 # ANALYSIS: Rosewood Payroll (pre-refactor)
 
 > Written and committed **before any code was changed**, so the history shows diagnosis before treatment.
-> Standard references use *AmaliTech Coding Standards: Java Edition* (`§ ___` = fill in the section number).
+> Standard references use *AmaliTech Coding Standards: Java Edition*. Chapter names are given as listed in the standard; `§ ___` marks where the section number is added.
 
 ---
 
@@ -139,6 +139,8 @@ classDiagram
 - `PayrollCalculator` is the only class with logic, and it depends on everything else. There is no tax, overtime, validation or money abstraction at all.
 - `Employee` is used only to print a name, so the lookup contributes nothing to the number returned.
 
+### 3.2 Sequence diagram: unknown employee (the silent failure)
+
 
 ### 3.2 Sequence diagram: Unknown employee — the silent failure
 
@@ -168,7 +170,6 @@ sequenceDiagram
 
 **What the diagram shows:** The calculator does not check whether the employee exists. It calculates the payslip figures before accidentally triggering a `NullPointerException` when accessing the employee's name. The broad exception handler swallows the error and returns `0.0`, leaving the caller unaware that payroll calculation failed.
 
-**What the diagram shows:** the "not found" case is never checked. It is only detected because the `println` happens to dereference `null`. The correct net pay is calculated and then thrown away. The caller receives `0.0` with no signal that anything went wrong.
 
 ### 3.3 Decision flow of the tax calculation (as-is)
 
@@ -200,19 +201,19 @@ Ranking criterion: **consequence for a real payslip**, then how hard the problem
 
 | Rank | Finding | Where | Evidence | Why it matters for payroll | Standard |
 |---|---|---|---|---|---|
-| **1** | **Swallowed failure.** `catch (Exception e) { return 0; }` | `PayrollCalculator`, catch block | Demo prints `0.0` for an unknown employee | Every error (missing employee, bad input, a bug) becomes `0`, which is also a legitimate answer for 0 hours. Callers cannot distinguish failure from a real result. | § ___ |
-| **2** | **No deliberate "not found" handling.** The repository returns `null`; the code never checks it. | `InMemoryEmployeeRepository.findById`; `println` in the calculator | Sequence diagram 3.2 | The missing-employee path only works by accident (an NPE). Remove the print and an unknown employee gets paid. | § ___ |
-| **3** | **Money as `double`, no rounding rule** | `PayrollCalculator` throughout | `gross - gross * taxRate` | Binary floating point cannot represent most decimal amounts exactly, and there is no defined rounding to pesewas. Payslips can drift by a fraction of a pesewa. | § ___ |
-| **4** | **No input validation** | `calculateNetPay` | -5h @ 20 gives gross -100, tax 5%, **net -95**. `NaN` hours skip every comparison and land in the HIGH band, returning `NaN`. | Negative hours, negative rates, `NaN` and `Infinity` produce nonsense with no error. | § ___ |
-| **5** | **Tax bands as an `if/else` chain (Open/Closed)** | `PayrollCalculator` | Diagram 3.3 | The coming tax band cannot be added without editing existing logic, which risks breaking the three bands that already work. | § ___ |
-| **6** | **Hard-wired dependency (Dependency Inversion)** | `new InMemoryEmployeeRepository()` in the field initialiser | Diagram 3.1 | Cannot substitute a stub or mock, so a failing lookup can't be tested. This is the root cause of test 2 being a mock of the class under test. | § ___ |
-| **7** | **God method (Single Responsibility).** One method does lookup, overtime, gross, band selection, tax, net, printing and error policy. | `calculateNetPay` | ~8 reasons to change | Any rule change touches the same method, and nothing can be tested in isolation. | § ___ |
-| **8** | **I/O in business logic.** `System.out.println` with the employee's name, pay and a hard-coded `GHS`. | `calculateNetPay` | | Side effect inside a calculation, personal data written to stdout, no logging control, currency hard-coded. | § ___ |
-| **9** | **Magic numbers.** `40`, `0.5`, `1000`, `5000`, `0.05`, `0.15`, `0.25` | `calculateNetPay` | | Business rules are invisible and unnamed. The comments `// LOW` etc. are standing in for names. | § ___ |
-| **10** | **Pointless employee lookup.** The `Employee` is used only for the print, while the rate comes from the caller. | `calculateNetPay` | | Either the lookup should be a real validation (employee must exist), or it should be removed. This needs a design decision (see Decisions). | § ___ |
-| **11** | **Primitive obsession / unclear API.** Three loose primitives (`String`, `double`, `double`) in a fixed order. | Method signature | | Easy to swap `hours` and `rate` without the compiler noticing. No types for money or hours. | § ___ |
-| **12** | **Repository returns `null` instead of `Optional`/exception.** | `EmployeeRepository` contract | | The contract does not tell callers that absence is possible. | § ___ |
-| **13** | **`Demo` coupled to the concrete constructor** | `Demo` | | Will break when dependencies are injected, so it must be updated as part of the refactor. | § ___ |
+| **1** | **Swallowed failure.** `catch (Exception e) { return 0; }` | `PayrollCalculator`, catch block | Demo prints `0.0` for an unknown employee | Every error (missing employee, bad input, a bug) becomes `0`, which is also a legitimate answer for 0 hours. Callers cannot distinguish failure from a real result. | Error handling (§ ___) |
+| **2** | **No deliberate "not found" handling.** The repository returns `null`; the code never checks it. | `InMemoryEmployeeRepository.findById`; `println` in the calculator | Sequence diagram 3.2 | The missing-employee path only works by accident (an NPE). Remove the print and an unknown employee gets paid. | Error handling (§ ___) |
+| **3** | **Money as `double`, no rounding rule** | `PayrollCalculator` throughout | `gross - gross * taxRate` | Binary floating point cannot represent most decimal amounts exactly, and there is no defined rounding to pesewas. Payslips can drift by a fraction of a pesewa. | Objects and data structures (§ ___) |
+| **4** | **No input validation** | `calculateNetPay` | -5h @ 20 gives gross -100, tax 5%, **net -95**. `NaN` hours skip every comparison and land in the HIGH band, returning `NaN`. | Negative hours, negative rates, `NaN` and `Infinity` produce nonsense with no error. | Error handling (§ ___) |
+| **5** | **Tax bands as an `if/else` chain (Open/Closed)** | `PayrollCalculator` | Diagram 3.3 | The coming tax band cannot be added without editing existing logic, which risks breaking the three bands that already work. | SOLID: Open/Closed (§ ___) |
+| **6** | **Hard-wired dependency (Dependency Inversion)** | `new InMemoryEmployeeRepository()` in the field initialiser | Diagram 3.1 | Cannot substitute a stub or mock, so a failing lookup can't be tested. This is the root cause of test 2 being a mock of the class under test. | SOLID: Dependency Inversion (§ ___); 2.2 composition over inheritance |
+| **7** | **God method (Single Responsibility).** One method does lookup, overtime, gross, band selection, tax, net, printing and error policy. | `calculateNetPay` | ~8 reasons to change | Any rule change touches the same method, and nothing can be tested in isolation. | SOLID: Single Responsibility (§ ___); Functions (§ ___) |
+| **8** | **I/O in business logic.** `System.out.println` with the employee's name, pay and a hard-coded `GHS`. | `calculateNetPay` | | Side effect inside a calculation, personal data written to stdout, no logging control, currency hard-coded. | Functions (§ ___) |
+| **9** | **Magic numbers.** `40`, `0.5`, `1000`, `5000`, `0.05`, `0.15`, `0.25` | `calculateNetPay` | | Business rules are invisible and unnamed. The comments `// LOW` etc. are standing in for names. | Names (§ ___) |
+| **10** | **Pointless employee lookup.** The `Employee` is used only for the print, while the rate comes from the caller. | `calculateNetPay` | | Either the lookup should be a real validation (employee must exist), or it should be removed. This needs a design decision (see Decisions). | 2.2 YAGNI |
+| **11** | **Primitive obsession / unclear API.** Three loose primitives (`String`, `double`, `double`) in a fixed order. | Method signature | | Easy to swap `hours` and `rate` without the compiler noticing. No types for money or hours. | Objects and data structures (§ ___) |
+| **12** | **Repository returns `null` instead of `Optional`/exception.** | `EmployeeRepository` contract | | The contract does not tell callers that absence is possible. | Error handling (§ ___) |
+| **13** | **`Demo` coupled to the concrete constructor** | `Demo` | | Will break when dependencies are injected, so it must be updated as part of the refactor. | SOLID: Dependency Inversion (§ ___) |
 
 ### 4.1 SOLID scorecard
 
@@ -244,6 +245,8 @@ Earning GHS 0.01 more **reduces** take-home pay by about GHS 100 at the first th
 ---
 
 ## 6. AI-generated tests that prove nothing (ranked separately)
+
+Measured against the standard's test-driven development chapter (§ ___): a test that cannot fail, or that checks a mock instead of behaviour, protects nothing.
 
 | Rank | Test | What it really asserts | Why it cannot catch a bug | Verdict |
 |---|---|---|---|---|
@@ -482,3 +485,14 @@ Now the bands are data handed to `TaxCalculator`, which depends only on the `Tax
 1. Is the whole-gross tax rate intended? Earning 0.01 more at a threshold lowers take-home pay by about 100 at 1000 and about 500 at 5000.
 2. Is a rate of 0 valid, and should hours have an upper limit?
 3. Is half-up to 2 decimals the required rounding rule?
+
+### 9.9 Alignment with the standard's general principles (2.2)
+
+| Principle | Evidence in this code |
+|---|---|
+| KISS | `PayrollService.calculatePayslip` reads as five plain steps: validate, look up, gross, tax, net. No framework, no reflection. |
+| DRY | One `FlatRateTaxBand` instead of three copy-pasted band classes (D9); one `Money` class for the rounding rule (D3); the golden table is the single source for expected figures. |
+| YAGNI | Only the repository is an interface (D14); no speculative plugin or rules engine. The new band is supported by the seam that exists, not by extra machinery. |
+| Composition over inheritance | `PayrollService` holds four collaborators instead of extending anything. Inheritance appears only for the exception types, where it is the language's own mechanism. |
+| Readability | Named constants (`STANDARD_HOURS`, `OVERTIME_MULTIPLIER`, band rates), intention-revealing method names, tests named as sentences. |
+| Consistency | All money is `BigDecimal` rounded by `Money`; every deliberate failure is a `PayrollException` subtype. **One departure, on purpose:** constructors of `FlatRateTaxBand` and `TaxCalculator` throw `IllegalArgumentException` or `NullPointerException` for wrong *configuration*. That is a programmer error, not a payroll failure. |
