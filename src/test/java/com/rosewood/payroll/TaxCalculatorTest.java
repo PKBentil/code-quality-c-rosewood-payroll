@@ -24,7 +24,6 @@ class TaxCalculatorTest {
 
     private final TaxCalculator standard = new TaxCalculator(StandardTaxBands.all());
 
-    // Gross and tax figures worked out by hand from the rules: 5% below 1000, 15% below 5000, else 25%.
     @ParameterizedTest(name = "tax on {0} = {1}")
     @CsvSource({
             "0.00,    0.00",     // G11 a valid zero is taxed at the low rate: still zero

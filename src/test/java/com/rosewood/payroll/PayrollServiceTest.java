@@ -9,6 +9,7 @@ import com.rosewood.payroll.domain.tax.StandardTaxBands;
 import com.rosewood.payroll.domain.tax.TaxBand;
 import com.rosewood.payroll.domain.tax.TaxCalculator;
 import com.rosewood.payroll.exceptions.EmployeeNotFoundException;
+import com.rosewood.payroll.exceptions.InvalidEmployeeIdException;
 import com.rosewood.payroll.exceptions.InvalidHoursException;
 import com.rosewood.payroll.exceptions.InvalidRateException;
 import com.rosewood.payroll.exceptions.NoApplicableTaxBandException;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -30,10 +32,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-/**
- * Only the repository is a mock: it is the one real boundary. The calculators and the validator are the
- * real classes, so these tests check the pay figures, not that a mock was called.
- */
 @ExtendWith(MockitoExtension.class)
 class PayrollServiceTest {
 
@@ -53,7 +51,6 @@ class PayrollServiceTest {
         return serviceWith(StandardTaxBands.all());
     }
 
-    // The golden table, worked out by hand from the rules. net = gross - tax.
     @ParameterizedTest(name = "{0}h at {1}: gross {2}, tax {3}, net {4}")
     @CsvSource({
             "40,    20,      800.00,  40.00,   760.00",    // G1
@@ -104,11 +101,33 @@ class PayrollServiceTest {
     }
 
     @ParameterizedTest
-    @ValueSource(doubles = {-0.01, -40.0, Double.NaN, Double.POSITIVE_INFINITY})
+    @ValueSource(doubles = {-0.01, -40.0, Double.NaN, Double.POSITIVE_INFINITY, 168.01})
     void invalidHoursAreRejectedBeforeAnyLookup(double hours) {
-        assertThrows(InvalidHoursException.class,
+        InvalidHoursException ex = assertThrows(InvalidHoursException.class,
                 () -> standardService().calculatePayslip("e1", hours, TWENTY));
 
+        assertEquals(hours, ex.getHours());
+        verifyNoInteractions(repository);
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"   "})
+    void aBlankEmployeeIdIsRejectedBeforeAnyLookup(String employeeId) {
+        InvalidEmployeeIdException ex = assertThrows(InvalidEmployeeIdException.class,
+                () -> standardService().calculatePayslip(employeeId, 40, TWENTY));
+
+        assertEquals(employeeId, ex.getEmployeeId());
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void aRateAboveTheSanityLimitIsRejectedBeforeAnyLookup() {
+        BigDecimal tooHigh = new BigDecimal("10000.01");
+        InvalidRateException ex = assertThrows(InvalidRateException.class,
+                () -> standardService().calculatePayslip("e1", 40, tooHigh));
+
+        assertEquals(tooHigh, ex.getRate());
         verifyNoInteractions(repository);
     }
 

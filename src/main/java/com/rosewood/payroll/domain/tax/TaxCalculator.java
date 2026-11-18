@@ -6,7 +6,6 @@ import com.rosewood.payroll.exceptions.NoApplicableTaxBandException;
 import java.math.BigDecimal;
 import java.util.List;
 
-/** Picks the first band that applies to a gross pay amount and asks it for the tax. Bands are injected. */
 public class TaxCalculator {
 
     private final List<TaxBand> bands;

@@ -5,15 +5,11 @@ import com.rosewood.payroll.domain.model.Money;
 import java.math.BigDecimal;
 import java.util.Objects;
 
-/**
- * Taxes the whole gross pay at one rate when it falls in [lowerInclusive, upperExclusive).
- * An open-ended band has no upper bound. This is the current Rosewood rule: the rate applies to the
- * whole amount, not just the slice above the threshold (see ANALYSIS.md, open business question).
- */
+
 public final class FlatRateTaxBand implements TaxBand {
 
     private final BigDecimal lowerInclusive;
-    private final BigDecimal upperExclusive; // null means no upper bound
+    private final BigDecimal upperExclusive;
     private final BigDecimal rate;
 
     private FlatRateTaxBand(BigDecimal lowerInclusive, BigDecimal upperExclusive, BigDecimal rate) {
