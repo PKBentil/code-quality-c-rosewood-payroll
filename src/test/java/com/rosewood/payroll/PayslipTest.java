@@ -28,6 +28,20 @@ class PayslipTest {
     }
 
     @Test
+    void derivesNetPayFromGrossAndTax() {
+        Payslip payslip = Payslip.of(employee, gross, tax);
+
+        assertSame(employee, payslip.employee());
+        assertEquals(net, payslip.netPay());
+    }
+
+    @Test
+    void refusesToDeriveNetPayFromAMissingFigure() {
+        assertThrows(NullPointerException.class, () -> Payslip.of(employee, null, tax));
+        assertThrows(NullPointerException.class, () -> Payslip.of(employee, gross, null));
+    }
+
+    @Test
     void rejectsAnyMissingPart() {
         assertThrows(NullPointerException.class, () -> new Payslip(null, gross, tax, net));
         assertThrows(NullPointerException.class, () -> new Payslip(employee, null, tax, net));

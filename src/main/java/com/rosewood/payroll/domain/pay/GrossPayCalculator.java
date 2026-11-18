@@ -9,6 +9,7 @@ public class GrossPayCalculator {
     private static final BigDecimal STANDARD_HOURS = BigDecimal.valueOf(40);
     private static final BigDecimal OVERTIME_MULTIPLIER = new BigDecimal("1.5");
 
+
     public BigDecimal calculate(double hoursWorked, BigDecimal hourlyRate) {
         BigDecimal hours = BigDecimal.valueOf(hoursWorked);
         BigDecimal regularHours = hours.min(STANDARD_HOURS);

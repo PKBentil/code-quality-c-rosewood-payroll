@@ -48,7 +48,7 @@ class NewTaxBandExtensionTest {
         bands.add(new PremiumTaxBand());        // new rule, placed first so it wins above 20,000
         bands.addAll(StandardTaxBands.all());   // the existing bands, exactly as they are
 
-        return new PayrollService(new InMemoryEmployeeRepository(), new PayInputValidator(),
+        return new PayrollService(new InMemoryEmployeeRepository(SampleStaff.all()), new PayInputValidator(),
                 new GrossPayCalculator(), new TaxCalculator(bands));
     }
 
@@ -71,13 +71,13 @@ class NewTaxBandExtensionTest {
 
     @Test
     void whenTheOldTopBandIsBoundedTheNewSetHasNoGapAndNoOverlap() {
-        // The shape to put in StandardTaxBands: the old top band gets an upper bound, the new band is added.
+        // The shape the bands take once the old top band is bounded and the new band is added.
         List<TaxBand> bounded = List.of(
                 FlatRateTaxBand.between(bd("0"), bd("1000"), bd("0.05")),
                 FlatRateTaxBand.between(bd("1000"), bd("5000"), bd("0.15")),
                 FlatRateTaxBand.between(bd("5000"), bd("20000"), bd("0.25")),
                 new PremiumTaxBand());
 
-        TaxBandCoverageTest.assertExactlyOneBandAppliesToEveryAmount(bounded, bd("30000.00"));
+        TaxBandAssertions.assertExactlyOneBandApplies(bounded, bd("30000.00"), bd("1000"), bd("5000"), bd("20000"));
     }
 }

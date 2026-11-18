@@ -1,26 +1,32 @@
 package com.rosewood.payroll.domain.tax;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
-/** Rosewood's current tax bands. Adding a band means adding one entry here (or one new TaxBand type). */
+
 public final class StandardTaxBands {
 
-    private static final BigDecimal ZERO = BigDecimal.ZERO;
-    private static final BigDecimal LOW_UPPER = new BigDecimal("1000");
-    private static final BigDecimal MEDIUM_UPPER = new BigDecimal("5000");
+    private record Tier(BigDecimal lowerInclusive, BigDecimal rate) {
+    }
 
-    private static final BigDecimal LOW_RATE = new BigDecimal("0.05");
-    private static final BigDecimal MEDIUM_RATE = new BigDecimal("0.15");
-    private static final BigDecimal HIGH_RATE = new BigDecimal("0.25");
+    private static final List<Tier> TIERS = List.of(
+            new Tier(new BigDecimal("0"), new BigDecimal("0.05")),
+            new Tier(new BigDecimal("1000"), new BigDecimal("0.15")),
+            new Tier(new BigDecimal("5000"), new BigDecimal("0.25")));
 
     private StandardTaxBands() {
     }
 
     public static List<TaxBand> all() {
-        return List.of(
-                FlatRateTaxBand.between(ZERO, LOW_UPPER, LOW_RATE),
-                FlatRateTaxBand.between(LOW_UPPER, MEDIUM_UPPER, MEDIUM_RATE),
-                FlatRateTaxBand.from(MEDIUM_UPPER, HIGH_RATE));
+        List<TaxBand> bands = new ArrayList<>();
+        for (int i = 0; i < TIERS.size(); i++) {
+            Tier tier = TIERS.get(i);
+            boolean isLast = i == TIERS.size() - 1;
+            bands.add(isLast
+                    ? FlatRateTaxBand.from(tier.lowerInclusive(), tier.rate())
+                    : FlatRateTaxBand.between(tier.lowerInclusive(), TIERS.get(i + 1).lowerInclusive(), tier.rate()));
+        }
+        return List.copyOf(bands);
     }
 }

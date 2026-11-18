@@ -7,6 +7,7 @@ import com.rosewood.payroll.domain.pay.GrossPayCalculator;
 import com.rosewood.payroll.domain.tax.StandardTaxBands;
 import com.rosewood.payroll.domain.tax.TaxCalculator;
 import com.rosewood.payroll.exceptions.EmployeeNotFoundException;
+import com.rosewood.payroll.exceptions.InvalidEmployeeIdException;
 import com.rosewood.payroll.exceptions.InvalidHoursException;
 import com.rosewood.payroll.validation.PayInputValidator;
 import org.junit.jupiter.api.Test;
@@ -15,11 +16,10 @@ import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Everything real, nothing mocked: the same wiring the Demo uses. */
 class PayrollServiceIntegrationTest {
 
     private final PayrollService service = new PayrollService(
-            new InMemoryEmployeeRepository(),
+            new InMemoryEmployeeRepository(SampleStaff.all()),
             new PayInputValidator(),
             new GrossPayCalculator(),
             new TaxCalculator(StandardTaxBands.all()));
@@ -62,8 +62,8 @@ class PayrollServiceIntegrationTest {
     }
 
     @Test
-    void aMissingEmployeeIdIsTreatedAsUnknown() {
-        assertThrows(EmployeeNotFoundException.class,
+    void aMissingEmployeeIdIsRejectedAsInvalidNotAsUnknown() {
+        assertThrows(InvalidEmployeeIdException.class,
                 () -> service.calculatePayslip(null, 40, new BigDecimal("20")));
     }
 

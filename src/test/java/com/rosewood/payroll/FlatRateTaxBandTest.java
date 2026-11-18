@@ -14,7 +14,6 @@ class FlatRateTaxBandTest {
 
     private static BigDecimal bd(String value) {
         return new BigDecimal(value);
-
     }
 
     private final TaxBand medium = FlatRateTaxBand.between(bd("1000"), bd("5000"), bd("0.15"));
