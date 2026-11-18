@@ -1,8 +1,5 @@
 # ANALYSIS: Rosewood Payroll (pre-refactor)
 
-> Written and committed **before any code was changed**, so the history shows diagnosis before treatment.
-> Standard references use *AmaliTech Coding Standards: Java Edition*. Chapter names are given as listed in the standard; `§ ___` marks where the section number is added.
-
 ---
 
 ## 1. Scope and method
